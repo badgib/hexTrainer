@@ -332,7 +332,39 @@ function endSession() {
   tbody.innerHTML='';
   session.answers.forEach((a,i)=>{
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${i+1}</td><td>${a.question}</td><td>${a.yourAnswer}</td><td>${a.correctAnswer}</td><td>${a.time}</td><td>${a.correct?'✔️':'❌'}</td>`;
+    // normalize hex formatting for display: ensure 0x prefix and uppercase letters when value is hex
+    const isQuestionHex = String(a.question).toLowerCase().startsWith('0x');
+    const formatHex = v => {
+      if (v == null) return '';
+      const s = String(v).trim();
+      if (/^0x[0-9a-f]+$/i.test(s)) return '0x' + s.slice(2).toUpperCase();
+      if (/^[0-9a-fA-F]+$/.test(s) && /[a-fA-F]/.test(s)) return '0x' + s.toUpperCase();
+      return s;
+    };
+
+    const displayQuestion = isQuestionHex ? formatHex(a.question) : String(a.question);
+    let displayYour = String(a.yourAnswer);
+    // if the correct answer is hex, the user was expected to input hex
+    const expectedHex = String(a.correctAnswer).toLowerCase().startsWith('0x');
+    if (expectedHex) {
+      // normalize user's hex input when possible
+      const maybeHex = String(a.yourAnswer).trim();
+      if (/^0x[0-9a-f]+$/i.test(maybeHex) || /^[0-9a-fA-F]+$/.test(maybeHex)) {
+        displayYour = formatHex(maybeHex);
+        // if answer was wrong, also append calculated decimal in parentheses
+        if (!a.correct) {
+          const hexPart = maybeHex.replace(/^0x/i, '');
+          const dec = parseInt(hexPart, 16);
+          if (!Number.isNaN(dec)) displayYour += ` (${dec})`;
+        }
+      }
+    } else {
+      // when question was hex, normalize user's decimal input not needed
+      displayYour = String(a.yourAnswer);
+    }
+    const displayCorrect = formatHex(a.correctAnswer);
+
+    tr.innerHTML = `<td>${i+1}</td><td>${displayQuestion}</td><td>${displayYour}</td><td>${displayCorrect}</td><td>${a.time}</td><td>${a.correct?'✔️':'❌'}</td>`;
     tbody.appendChild(tr);
   });
 
