@@ -7,18 +7,27 @@
   <style>
     body {
       font-family: system-ui, sans-serif;
-      background: #0f172a;
-      color: #e5e7eb;
+      background: linear-gradient(180deg,#050003 0%, #0b0008 100%);
+      color: #e6e1ea;
       margin: 0;
       padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     h1, h2 { margin-top: 0; }
     .card {
-      background: #020617;
+      background: linear-gradient(180deg,#06040a,#0b0710);
       border-radius: 12px;
       padding: 1.5rem;
       margin-bottom: 1.5rem;
-      box-shadow: 0 10px 30px rgba(0,0,0,.4);
+      box-shadow: 0 10px 30px rgba(0,0,0,.6);
+      width: 100%;
+      max-width: 960px;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     label { display: block; margin-top: .5rem; }
     input, select, button {
@@ -34,21 +43,30 @@
       border: 1px solid #334155;
     }
     button {
-      background: #2563eb;
+      background: #7c2bd6;
       color: white;
       cursor: pointer;
     }
-    button.secondary { background: #334155; }
+    button.secondary { background: #3f214a; }
     .row { display: flex; gap: 1rem; flex-wrap: wrap; }
     .hidden { display: none; }
     .question {
-      font-size: 2rem;
+      font-size: 3rem;
       margin: 1rem 0;
       font-family: ui-monospace, monospace;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-align: center;
     }
-    canvas { background: #020617; border-radius: 8px; }
+    canvas { background: #070511; border-radius: 8px; }
+    #answer { font-size: 1.25rem; padding: .75rem .9rem; width: 60%; max-width: 520px; text-align: center; }
+    h1 { text-align: center; margin-bottom: 1rem; }
+    .row { align-items: center; }
+    #history { order: 99; }
+    #chart { width: 100%; height: 160px; display: block; }
     table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
     th, td { border: 1px solid #334155; padding: 0.5rem; text-align: left; }
+    .card table, .card canvas { width: 100%; }
   </style>
 </head>
 <body>
@@ -102,7 +120,11 @@
 
 <div id="history" class="card">
   <h2>History</h2>
-  <canvas id="chart" width="600" height="200"></canvas>
+  <canvas id="chart"></canvas>
+  <div id="historyList"></div>
+  <div style="margin-top:.5rem">
+    <button class="secondary" onclick="clearHistory()">Clear History</button>
+  </div>
 </div>
 
 <script>
@@ -159,7 +181,7 @@ function submitAnswer() {
   session.answers.push({
     question: mode === 'hex-dec' ? '0x'+value.toString(16) : value.toString(10),
     yourAnswer: rawInput,
-    correctAnswer: mode==='hex-dec'?value:'0x'+value.toString(16),
+    correctAnswer: mode==='hex-dec'?String(value):'0x'+value.toString(16),
     time: ((performance.now()-askedAt)/1000).toFixed(2),
     correct
   });
@@ -176,7 +198,7 @@ function skipQuestion() {
   session.answers.push({
     question: mode==='hex-dec'?'0x'+value.toString(16):value.toString(10),
     yourAnswer:'(skipped)',
-    correctAnswer: mode==='hex-dec'?value:'0x'+value.toString(16),
+    correctAnswer: mode==='hex-dec'?String(value):'0x'+value.toString(16),
     time:((performance.now()-askedAt)/1000).toFixed(2),
     correct:false
   });
@@ -189,6 +211,7 @@ function startSession() {
   askedNumbers.clear();
   document.getElementById('setup').classList.add('hidden');
   document.getElementById('quiz').classList.remove('hidden');
+  document.getElementById('history').classList.add('hidden');
   startTime = performance.now();
   nextQuestion();
 }
@@ -196,13 +219,23 @@ function startSession() {
 function endSession() {
   const totalTime=(performance.now()-startTime)/1000;
   const correct=session.answers.filter(a=>a.correct).length;
-  const avg=session.answers.reduce((s,a)=>s+parseFloat(a.time),0)/session.answers.length;
+  const avg = session.answers.length ? session.answers.reduce((s,a)=>s+parseFloat(a.time),0)/session.answers.length : 0;
 
   try{
-    const hist=JSON.parse(localStorage.getItem('hexHistory')||'[]');
-    hist.push({date:Date.now(),count:session.count,correct,totalTime,avg,answers:session.answers});
-    localStorage.setItem('hexHistory',JSON.stringify(hist));
-  }catch(e){console.error('LocalStorage error',e);}
+    let hist = [];
+    try {
+      const raw = localStorage.getItem('hexHistory');
+      hist = raw ? JSON.parse(raw) : [];
+      if(!Array.isArray(hist)) hist = [];
+    } catch (e) {
+      console.error('Failed to parse stored history, starting fresh', e);
+      hist = [];
+    }
+    const correctPct = session.count ? Number(((correct/session.count)*100).toFixed(1)) : 0;
+    hist.push({date:Date.now(),mode:session.mode,bits:session.bits,count:session.count,correct,correctPct,totalTime,avg,answers:session.answers});
+    try { localStorage.setItem('hexHistory',JSON.stringify(hist)); }
+    catch(e){ console.error('Failed to write history to localStorage', e); }
+  }catch(e){console.error('LocalStorage error',e);} 
 
   document.getElementById('quiz').classList.add('hidden');
   document.getElementById('results').classList.remove('hidden');
@@ -219,6 +252,7 @@ function endSession() {
   });
 
   drawChart();
+  renderHistoryList();
 }
 
 function reset() {
@@ -229,25 +263,116 @@ function reset() {
 }
 
 function drawChart() {
-  const canvas=document.getElementById('chart');
-  const ctx=canvas.getContext('2d');
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  const cw = canvas.clientWidth || 600;
+  const ch = canvas.clientHeight || 160;
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = Math.floor(cw * ratio);
+  canvas.height = Math.floor(ch * ratio);
+  canvas.style.width = cw + 'px';
+  canvas.style.height = ch + 'px';
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, cw, ch);
 
-  const hist=JSON.parse(localStorage.getItem('hexHistory')||'[]');
-  if(!hist.length) return;
+  let hist = [];
+  try { hist = JSON.parse(localStorage.getItem('hexHistory')||'[]'); } catch(e){ hist = []; }
+  if(!Array.isArray(hist) || hist.length === 0) return;
 
-  const maxTime=Math.max(...hist.map(h=>h.avg));
-  ctx.fillStyle='#2563eb';
-  hist.forEach((h,i)=>{
-    const x=(i/(hist.length-1||1))*canvas.width;
-    const y=canvas.height-(h.avg/maxTime)*canvas.height;
-    ctx.fillRect(x-2,y-2,4,4);
+  const mappedTime = hist.map(h => Number(h.avg) || 0);
+  const maxTime = Math.max(...mappedTime);
+
+  // compute correct percentage series (0-100)
+  const mappedPct = hist.map(h => {
+    if (typeof h.correctPct !== 'undefined') return Number(h.correctPct) || 0;
+    const c = Number(h.correct) || 0; const cnt = Number(h.count) || 1; return cnt? (c/cnt*100) : 0;
   });
+  const maxPct = 100;
+
+  // draw percent as primary series (blue), time as secondary (gray)
+  ctx.lineWidth = 2;
+  const pointRadius = Math.max(3, Math.min(8, ch * 0.04));
+
+  // percent polyline (magenta)
+  ctx.strokeStyle = '#a21caf';
+  ctx.fillStyle = '#a21caf';
+  ctx.beginPath();
+  hist.forEach((h, i) => {
+    const x = (i/((hist.length-1)||1))*cw;
+    const pct = mappedPct[i] || 0;
+    const y = ch - (pct/maxPct)*ch;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+  hist.forEach((h,i)=>{
+    const x=(i/((hist.length-1)||1))*cw;
+    const pct = mappedPct[i]||0;
+    const y = ch - (pct/maxPct)*ch;
+    ctx.beginPath(); ctx.arc(x,y,pointRadius,0,Math.PI*2); ctx.fill();
+  });
+
+  // time polyline (secondary, lighter)
+  if (isFinite(maxTime) && maxTime > 0) {
+    ctx.strokeStyle = 'rgba(156,39,176,0.9)';
+    ctx.fillStyle = 'rgba(156,39,176,0.9)';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    hist.forEach((h, i) => {
+      const x = (i/((hist.length-1)||1))*cw;
+      const avgVal = Number(h.avg) || 0;
+      const y = ch - (avgVal/maxTime)*(ch*0.6); // compress time series to lower portion
+      const yAdj = ch - (ch*0.2) - ( (avgVal/maxTime) * (ch*0.6) );
+      if(i===0) ctx.moveTo(x,yAdj); else ctx.lineTo(x,yAdj);
+    });
+    ctx.stroke();
+    hist.forEach((h,i)=>{
+      const x=(i/((hist.length-1)||1))*cw;
+      const avgVal = Number(h.avg)||0;
+      const yAdj = ch - (ch*0.2) - ((avgVal/maxTime)*(ch*0.6));
+      ctx.beginPath(); ctx.arc(x,yAdj,Math.max(2, pointRadius-2),0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  // legend
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillStyle = '#a21caf';
+  ctx.fillRect(8,8,10,10);
+  ctx.fillStyle = '#e6e1ea'; ctx.fillText('Correct %', 24, 17);
+  ctx.fillStyle = 'rgba(156,39,176,0.9)'; ctx.fillRect(110,8,10,10);
+  ctx.fillStyle = '#e6e1ea'; ctx.fillText('Avg time (s)', 126, 17);
 }
 
 // Show history on main page initially
 document.getElementById('history').classList.remove('hidden');
 drawChart();
+renderHistoryList();
+
+function renderHistoryList(){
+  const container = document.getElementById('historyList');
+  container.innerHTML = '';
+  let hist = [];
+  try { hist = JSON.parse(localStorage.getItem('hexHistory')||'[]'); } catch(e){ hist = []; }
+  if(!Array.isArray(hist) || hist.length===0){ container.innerHTML = '<p>No history yet.</p>'; return; }
+
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>Date</th><th>Mode</th><th>Bits</th><th>Count</th><th>Correct</th><th>%</th><th>Total (s)</th><th>Avg (s)</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+  hist.slice().reverse().forEach(h => {
+    const tr = document.createElement('tr');
+    const date = new Date(h.date || 0).toLocaleString();
+    const pct = (typeof h.correctPct !== 'undefined') ? (Number(h.correctPct)||0) : ((Number(h.correct)||0)/(Number(h.count)||1)*100);
+    tr.innerHTML = `<td>${date}</td><td>${h.mode||''}</td><td>${h.bits||''}</td><td>${h.count||''}</td><td>${h.correct||0}</td><td>${pct.toFixed(1)}</td><td>${(Number(h.totalTime)||0).toFixed(2)}</td><td>${(Number(h.avg)||0).toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  container.appendChild(table);
+}
+
+function clearHistory(){
+  if(!confirm('Clear all history?')) return;
+  try{ localStorage.removeItem('hexHistory'); } catch(e){ console.error('Failed to clear history', e); }
+  drawChart(); renderHistoryList();
+}
 </script>
 
 </body>
