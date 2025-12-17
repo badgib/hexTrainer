@@ -15,7 +15,9 @@
       flex-direction: column;
       align-items: center;
     }
-    h1, h2 { margin-top: 0; }
+    h1, h2 {
+      margin-top: 0; 
+    }
     .card {
       background: linear-gradient(180deg,#06040a,#0b0710);
       border-radius: 12px;
@@ -29,7 +31,26 @@
       flex-direction: column;
       align-items: center;
     }
-    label { display: block; margin-top: .5rem; }
+    label {
+      display: block;
+      margin-top: .5rem;
+    }
+    .label-inline{
+      display:flex;
+      align-items:center;
+      gap:.5rem;
+    }
+    #binaryAid {
+      font-family: ui-monospace, monospace;
+      font-size: 1.25rem;
+      letter-spacing: 2px;
+      margin-top: 2rem;
+      text-align: center;
+      color: #9ca3af;
+    }
+    .mt-05 {
+      margin-top: .5rem;
+    }
     input, select, button {
       margin-top: .5rem;
       padding: .5rem .75rem;
@@ -47,26 +68,64 @@
       color: white;
       cursor: pointer;
     }
-    button.secondary { background: #3f214a; }
-    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .hidden { display: none; }
+    button.secondary {
+      background: #3f214a;
+    }
+    .row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .hidden {
+      display: none;
+    }
     .question {
       font-size: 3rem;
-      margin: 1rem 0;
+      margin-bottom: 1rem;
       font-family: ui-monospace, monospace;
       font-weight: 700;
       letter-spacing: 0.5px;
       text-align: center;
     }
-    canvas { background: #070511; border-radius: 8px; }
-    #answer { font-size: 1.25rem; padding: .75rem .9rem; width: 60%; max-width: 520px; text-align: center; }
-    h1 { text-align: center; margin-bottom: 1rem; }
-    .row { align-items: center; }
-    #history { order: 99; }
-    #chart { width: 100%; height: 160px; display: block; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
-    th, td { border: 1px solid #334155; padding: 0.5rem; text-align: left; }
-    .card table, .card canvas { width: 100%; }
+    canvas { 
+      background: #070511;
+      border-radius: 8px;
+    }
+    #answer {
+      font-size: 1.25rem;
+      padding: .75rem .9rem;
+      width: 60%;
+      max-width: 520px;
+      text-align: center;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .row {
+      align-items: center;
+    }
+    #history {
+      margin-top: 0;
+    }
+    #chart {
+      width: 100%;
+      height: 160px;
+      margin-bottom: 1rem;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 1rem;
+    }
+    th, td {
+      border: 1px solid #334155;
+      padding: .5rem;
+      text-align: center;
+    }
+    .card table, .card canvas {
+      margin-top: 1rem;
+    }
   </style>
 </head>
 <body>
@@ -93,12 +152,16 @@
     <label>Questions
       <input id="count" type="number" value="10" min="1" max="200" />
     </label>
+    <label class="label-inline">
+      <input id="binaryAidCheckbox" type="checkbox" /> Binary aid
+    </label>
   </div>
   <button onclick="startSession()">Start</button>
 </div>
 
 <div id="quiz" class="card hidden">
   <div id="progress"></div>
+  <div id="binaryAid" aria-hidden="true"></div>
   <div id="question" class="question"></div>
   <input id="answer" autocomplete="off" />
   <div class="row">
@@ -122,7 +185,7 @@
   <h2>History</h2>
   <canvas id="chart"></canvas>
   <div id="historyList"></div>
-  <div style="margin-top:.5rem">
+  <div class="mt-05">
     <button class="secondary" onclick="clearHistory()">Clear History</button>
   </div>
 </div>
@@ -149,9 +212,9 @@ function nextQuestion() {
     : session.mode;
 
   session.current = { value, mode, askedAt: performance.now() };
-
-  const q = mode === 'hex-dec' ? '0x' + value.toString(16) : value.toString(10);
+  const q = mode === 'hex-dec' ? '0x' + value.toString(16).toUpperCase() : value.toString(10);
   document.getElementById('progress').textContent = `Question ${session.index+1} / ${session.count}`;
+  renderBinaryAid();
   document.getElementById('question').textContent = q;
   document.getElementById('answer').value = '';
   document.getElementById('answer').focus();
@@ -179,9 +242,9 @@ function submitAnswer() {
 
   const correct = parsed === value;
   session.answers.push({
-    question: mode === 'hex-dec' ? '0x'+value.toString(16) : value.toString(10),
+    question: mode === 'hex-dec' ? '0x'+value.toString(16).toUpperCase() : value.toString(10),
     yourAnswer: rawInput,
-    correctAnswer: mode==='hex-dec'?String(value):'0x'+value.toString(16),
+    correctAnswer: mode==='hex-dec'?String(value):'0x'+value.toString(16).toUpperCase(),
     time: ((performance.now()-askedAt)/1000).toFixed(2),
     correct
   });
@@ -196,9 +259,9 @@ document.getElementById('answer').addEventListener('keydown', e => { if(e.key===
 function skipQuestion() {
   const { value, mode, askedAt } = session.current;
   session.answers.push({
-    question: mode==='hex-dec'?'0x'+value.toString(16):value.toString(10),
+    question: mode==='hex-dec'?'0x'+value.toString(16).toUpperCase():value.toString(10),
     yourAnswer:'(skipped)',
-    correctAnswer: mode==='hex-dec'?String(value):'0x'+value.toString(16),
+    correctAnswer: mode==='hex-dec'?String(value):'0x'+value.toString(16).toUpperCase(),
     time:((performance.now()-askedAt)/1000).toFixed(2),
     correct:false
   });
@@ -208,6 +271,7 @@ function skipQuestion() {
 
 function startSession() {
   session={mode:document.getElementById('mode').value,bits:parseInt(document.getElementById('bits').value),count:parseInt(document.getElementById('count').value),index:0,answers:[]};
+  session.binaryAid = !!document.getElementById('binaryAidCheckbox').checked;
   askedNumbers.clear();
   document.getElementById('setup').classList.add('hidden');
   document.getElementById('quiz').classList.remove('hidden');
@@ -215,6 +279,27 @@ function startSession() {
   startTime = performance.now();
   nextQuestion();
 }
+
+function toggleBinaryAid(checked){
+  if(session) { session.binaryAid = !!checked; renderBinaryAid(); }
+}
+
+function renderBinaryAid(){
+  const el = document.getElementById('binaryAid');
+  if(!session || !session.current || !session.binaryAid){ el.textContent = ''; return; }
+  const value = session.current.value;
+  const bits = session.bits || 8;
+  let bin = (value >>> 0).toString(2).padStart(bits, '0');
+  // group by nibble
+  const groups = [];
+  for(let i=0;i<bin.length;i+=4) groups.push(bin.slice(i,i+4));
+  // digits display (grouped with spacing)
+  const art = groups.join('   ');
+  el.textContent = art;
+}
+
+// wire checkbox live toggle
+document.getElementById('binaryAidCheckbox').addEventListener('change', e=>{ toggleBinaryAid(e.target.checked); });
 
 function endSession() {
   const totalTime=(performance.now()-startTime)/1000;
