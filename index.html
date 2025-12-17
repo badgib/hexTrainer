@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Hex Fluency Trainer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      margin: 0;
+      padding: 2rem;
+    }
+    h1, h2 { margin-top: 0; }
+    .card {
+      background: #020617;
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    }
+    label { display: block; margin-top: .5rem; }
+    input, select, button {
+      margin-top: .5rem;
+      padding: .5rem .75rem;
+      font-size: 1rem;
+      border-radius: 8px;
+      border: none;
+    }
+    input, select {
+      background: #020617;
+      color: #e5e7eb;
+      border: 1px solid #334155;
+    }
+    button {
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+    button.secondary { background: #334155; }
+    .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .hidden { display: none; }
+    .question {
+      font-size: 2rem;
+      margin: 1rem 0;
+      font-family: ui-monospace, monospace;
+    }
+    canvas { background: #020617; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { border: 1px solid #334155; padding: 0.5rem; text-align: left; }
+  </style>
+</head>
+<body>
+
+<h1>Hex Fluency Trainer</h1>
+
+<div id="setup" class="card">
+  <h2>Session Setup</h2>
+  <div class="row">
+    <label>Mode
+      <select id="mode">
+        <option value="hex-dec">Hex → Dec</option>
+        <option value="dec-hex">Dec → Hex</option>
+        <option value="mixed">Mixed</option>
+      </select>
+    </label>
+    <label>Bit Width
+      <select id="bits">
+        <option value="8">8-bit</option>
+        <option value="16">16-bit</option>
+        <option value="32">32-bit</option>
+      </select>
+    </label>
+    <label>Questions
+      <input id="count" type="number" value="20" min="1" max="200" />
+    </label>
+  </div>
+  <button onclick="startSession()">Start</button>
+</div>
+
+<div id="quiz" class="card hidden">
+  <div id="progress"></div>
+  <div id="question" class="question"></div>
+  <input id="answer" autocomplete="off" />
+  <div class="row">
+    <button onclick="submitAnswer()">Submit</button>
+    <button class="secondary" onclick="skipQuestion()">Skip</button>
+    <button class="secondary" onclick="endSession()">Abandon Round</button>
+  </div>
+</div>
+
+<div id="results" class="card hidden">
+  <h2>Results</h2>
+  <div id="summary"></div>
+  <table>
+    <thead><tr><th>#</th><th>Question</th><th>Your Answer</th><th>Correct Answer</th><th>Time (s)</th><th>Correct</th></tr></thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+  <button class="secondary" onclick="reset()">New Session</button>
+</div>
+
+<div id="history" class="card">
+  <h2>History</h2>
+  <canvas id="chart" width="600" height="200"></canvas>
+</div>
+
+<script>
+let session = null;
+let startTime = 0;
+let askedNumbers = new Set();
+
+function rand(max) {
+  return Math.floor(Math.random() * max);
+}
+
+function nextQuestion() {
+  const max = 2 ** session.bits;
+  let value;
+  do {
+    value = rand(max);
+  } while (askedNumbers.has(value));
+  askedNumbers.add(value);
+
+  const mode = session.mode === 'mixed'
+    ? (Math.random() < 0.5 ? 'hex-dec' : 'dec-hex')
+    : session.mode;
+
+  session.current = { value, mode, askedAt: performance.now() };
+
+  const q = mode === 'hex-dec' ? '0x' + value.toString(16) : value.toString(10);
+  document.getElementById('progress').textContent = `Question ${session.index+1} / ${session.count}`;
+  document.getElementById('question').textContent = q;
+  document.getElementById('answer').value = '';
+  document.getElementById('answer').focus();
+}
+
+function sanitizeInput(input, mode) {
+  input = input.trim().toLowerCase();
+  if (!input) return null;
+  if (mode === 'hex-dec') {
+    if (!/^\d+$/.test(input)) return null;
+    return parseInt(input, 10);
+  } else {
+    if (input.startsWith('0x')) input = input.slice(2);
+    if (!/^[0-9a-f]+$/.test(input)) return null;
+    return parseInt(input, 16);
+  }
+}
+
+function submitAnswer() {
+  const rawInput = document.getElementById('answer').value;
+  if (!rawInput) { alert('Please enter a value'); return; }
+  const { value, mode, askedAt } = session.current;
+  const parsed = sanitizeInput(rawInput, mode);
+  if (parsed === null) { alert('Invalid input.'); return; }
+
+  const correct = parsed === value;
+  session.answers.push({
+    question: mode === 'hex-dec' ? '0x'+value.toString(16) : value.toString(10),
+    yourAnswer: rawInput,
+    correctAnswer: mode==='hex-dec'?value:'0x'+value.toString(16),
+    time: ((performance.now()-askedAt)/1000).toFixed(2),
+    correct
+  });
+
+  session.index++;
+  if (session.index >= session.count) endSession();
+  else nextQuestion();
+}
+
+document.getElementById('answer').addEventListener('keydown', e => { if(e.key==='Enter') submitAnswer(); });
+
+function skipQuestion() {
+  const { value, mode, askedAt } = session.current;
+  session.answers.push({
+    question: mode==='hex-dec'?'0x'+value.toString(16):value.toString(10),
+    yourAnswer:'(skipped)',
+    correctAnswer: mode==='hex-dec'?value:'0x'+value.toString(16),
+    time:((performance.now()-askedAt)/1000).toFixed(2),
+    correct:false
+  });
+  session.index++;
+  if(session.index>=session.count) endSession(); else nextQuestion();
+}
+
+function startSession() {
+  session={mode:document.getElementById('mode').value,bits:parseInt(document.getElementById('bits').value),count:parseInt(document.getElementById('count').value),index:0,answers:[]};
+  askedNumbers.clear();
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('quiz').classList.remove('hidden');
+  startTime = performance.now();
+  nextQuestion();
+}
+
+function endSession() {
+  const totalTime=(performance.now()-startTime)/1000;
+  const correct=session.answers.filter(a=>a.correct).length;
+  const avg=session.answers.reduce((s,a)=>s+parseFloat(a.time),0)/session.answers.length;
+
+  try{
+    const hist=JSON.parse(localStorage.getItem('hexHistory')||'[]');
+    hist.push({date:Date.now(),count:session.count,correct,totalTime,avg,answers:session.answers});
+    localStorage.setItem('hexHistory',JSON.stringify(hist));
+  }catch(e){console.error('LocalStorage error',e);}
+
+  document.getElementById('quiz').classList.add('hidden');
+  document.getElementById('results').classList.remove('hidden');
+  document.getElementById('history').classList.remove('hidden');
+
+  document.getElementById('summary').innerHTML=`<p>Correct: ${correct} / ${session.count}</p><p>Total time: ${totalTime.toFixed(2)}s</p><p>Average answer time: ${avg.toFixed(2)}s</p>`;
+
+  const tbody=document.getElementById('resultsBody');
+  tbody.innerHTML='';
+  session.answers.forEach((a,i)=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${i+1}</td><td>${a.question}</td><td>${a.yourAnswer}</td><td>${a.correctAnswer}</td><td>${a.time}</td><td>${a.correct?'✔️':'❌'}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  drawChart();
+}
+
+function reset() {
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('setup').classList.remove('hidden');
+  document.getElementById('history').classList.remove('hidden');
+  drawChart();
+}
+
+function drawChart() {
+  const canvas=document.getElementById('chart');
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const hist=JSON.parse(localStorage.getItem('hexHistory')||'[]');
+  if(!hist.length) return;
+
+  const maxTime=Math.max(...hist.map(h=>h.avg));
+  ctx.fillStyle='#2563eb';
+  hist.forEach((h,i)=>{
+    const x=(i/(hist.length-1||1))*canvas.width;
+    const y=canvas.height-(h.avg/maxTime)*canvas.height;
+    ctx.fillRect(x-2,y-2,4,4);
+  });
+}
+
+// Show history on main page initially
+document.getElementById('history').classList.remove('hidden');
+drawChart();
+</script>
+
+</body>
+</html>
