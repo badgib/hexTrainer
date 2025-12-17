@@ -201,9 +201,11 @@ function rand(max) {
 
 function nextQuestion() {
   const max = 2 ** session.bits;
+  const minVal = 16;
+  const range = Math.max(1, max - minVal);
   let value;
   do {
-    value = rand(max);
+    value = minVal + rand(range);
   } while (askedNumbers.has(value));
   askedNumbers.add(value);
 
