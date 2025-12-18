@@ -147,10 +147,11 @@
         <option value="8">8-bit</option>
         <option value="16">16-bit</option>
         <option value="32">32-bit</option>
+        <option value="64">64-bit</option>
       </select>
     </label>
     <label>Questions
-      <input id="count" type="number" value="10" min="1" max="200" />
+      <input id="count" type="number" value="10" min="1"/>
     </label>
     <label class="label-inline">
       <input id="binaryAidCheckbox" type="checkbox" /> Binary aid
@@ -195,25 +196,29 @@ let session = null;
 let startTime = 0;
 let askedNumbers = new Set();
 
-function rand(max) {
+function rand(max){
+
   return Math.floor(Math.random() * max);
 }
 
-function nextQuestion() {
+function nextQuestion(){
+
   const max = 2 ** session.bits;
   const minVal = 16;
   const range = Math.max(1, max - minVal);
   let value;
-  do {
+  
+  do
+  {
     value = minVal + rand(range);
-  } while (askedNumbers.has(value));
+  }
+  while (askedNumbers.has(value));
+  
   askedNumbers.add(value);
 
-  const mode = session.mode === 'mixed'
-    ? (Math.random() < 0.5 ? 'hex-dec' : 'dec-hex')
-    : session.mode;
+  const mode = session.mode === 'mixed' ? (Math.random() < 0.5 ? 'hex-dec' : 'dec-hex') : session.mode;
 
-  session.current = { value, mode, askedAt: performance.now() };
+  session.current = {value, mode, askedAt: performance.now()};
   const q = mode === 'hex-dec' ? '0x' + value.toString(16).toUpperCase() : value.toString(10);
   document.getElementById('progress').textContent = `Question ${session.index+1} / ${session.count}`;
   renderBinaryAid();
@@ -222,25 +227,38 @@ function nextQuestion() {
   document.getElementById('answer').focus();
 }
 
-function sanitizeInput(input, mode) {
+function sanitizeInput(input, mode){
+
   input = input.trim().toLowerCase();
-  if (!input) return null;
-  if (mode === 'hex-dec') {
-    if (!/^\d+$/.test(input)) return null;
+  if(!input) return null;
+  if(mode === 'hex-dec')
+  {
+    if(!/^\d+$/.test(input)) return null;
     return parseInt(input, 10);
-  } else {
-    if (input.startsWith('0x')) input = input.slice(2);
-    if (!/^[0-9a-f]+$/.test(input)) return null;
+  }
+  else
+  {
+    if(input.startsWith('0x')) input = input.slice(2);
+    if(!/^[0-9a-f]+$/.test(input)) return null;
     return parseInt(input, 16);
   }
 }
 
-function submitAnswer() {
+function submitAnswer(){
+
   const rawInput = document.getElementById('answer').value;
-  if (!rawInput) { alert('Please enter a value'); return; }
+  if(!rawInput)
+  {
+    alert('Please enter a value');
+    return;
+  }
   const { value, mode, askedAt } = session.current;
   const parsed = sanitizeInput(rawInput, mode);
-  if (parsed === null) { alert('Invalid input.'); return; }
+  if(parsed === null)
+  {
+    alert('Invalid input.');
+    return;
+  }
 
   const correct = parsed === value;
   session.answers.push({
@@ -252,14 +270,15 @@ function submitAnswer() {
   });
 
   session.index++;
-  if (session.index >= session.count) endSession();
+  if(session.index >= session.count) endSession();
   else nextQuestion();
 }
 
-document.getElementById('answer').addEventListener('keydown', e => { if(e.key==='Enter') submitAnswer(); });
+document.getElementById('answer').addEventListener('keydown', e => {if(e.key==='Enter') submitAnswer();});
 
-function skipQuestion() {
-  const { value, mode, askedAt } = session.current;
+function skipQuestion(){
+
+  const {value, mode, askedAt} = session.current;
   session.answers.push({
     question: mode==='hex-dec'?'0x'+value.toString(16).toUpperCase():value.toString(10),
     yourAnswer:'(skipped)',
@@ -271,7 +290,8 @@ function skipQuestion() {
   if(session.index>=session.count) endSession(); else nextQuestion();
 }
 
-function startSession() {
+function startSession(){
+
   session={mode:document.getElementById('mode').value,bits:parseInt(document.getElementById('bits').value),count:parseInt(document.getElementById('count').value),index:0,answers:[]};
   session.binaryAid = !!document.getElementById('binaryAidCheckbox').checked;
   askedNumbers.clear();
@@ -283,12 +303,22 @@ function startSession() {
 }
 
 function toggleBinaryAid(checked){
-  if(session) { session.binaryAid = !!checked; renderBinaryAid(); }
+
+  if(session)
+  {
+    session.binaryAid = !!checked;
+    renderBinaryAid();
+  }
 }
 
 function renderBinaryAid(){
+
   const el = document.getElementById('binaryAid');
-  if(!session || !session.current || !session.binaryAid){ el.textContent = ''; return; }
+  if(!session || !session.current || !session.binaryAid)
+  {
+    el.textContent = '';
+    return;
+  }
   const value = session.current.value;
   const bits = session.bits || 8;
   let bin = (value >>> 0).toString(2).padStart(bits, '0');
@@ -301,28 +331,42 @@ function renderBinaryAid(){
 }
 
 // wire checkbox live toggle
-document.getElementById('binaryAidCheckbox').addEventListener('change', e=>{ toggleBinaryAid(e.target.checked); });
+document.getElementById('binaryAidCheckbox').addEventListener('change', e=>{toggleBinaryAid(e.target.checked);});
 
 function endSession() {
   const totalTime=(performance.now()-startTime)/1000;
   const correct=session.answers.filter(a=>a.correct).length;
   const avg = session.answers.length ? session.answers.reduce((s,a)=>s+parseFloat(a.time),0)/session.answers.length : 0;
 
-  try{
+  try
+  {
     let hist = [];
-    try {
+    try
+    {
       const raw = localStorage.getItem('hexHistory');
       hist = raw ? JSON.parse(raw) : [];
       if(!Array.isArray(hist)) hist = [];
-    } catch (e) {
+    }
+    catch (e)
+    {
       console.error('Failed to parse stored history, starting fresh', e);
       hist = [];
     }
     const correctPct = session.count ? Number(((correct/session.count)*100).toFixed(1)) : 0;
     hist.push({date:Date.now(),mode:session.mode,bits:session.bits,count:session.count,correct,correctPct,totalTime,avg,answers:session.answers});
-    try { localStorage.setItem('hexHistory',JSON.stringify(hist)); }
-    catch(e){ console.error('Failed to write history to localStorage', e); }
-  }catch(e){console.error('LocalStorage error',e);} 
+    try
+    {
+      localStorage.setItem('hexHistory',JSON.stringify(hist));
+    }
+    catch(e)
+    {
+      console.error('Failed to write history to localStorage', e);
+    }
+  }
+  catch(e)
+  {
+    console.error('LocalStorage error',e);
+  } 
 
   document.getElementById('quiz').classList.add('hidden');
   document.getElementById('results').classList.remove('hidden');
@@ -333,14 +377,16 @@ function endSession() {
   const tbody=document.getElementById('resultsBody');
   tbody.innerHTML='';
   session.answers.forEach((a,i)=>{
+
     const tr=document.createElement('tr');
     // normalize hex formatting for display: ensure 0x prefix and uppercase letters when value is hex
     const isQuestionHex = String(a.question).toLowerCase().startsWith('0x');
-    const formatHex = v => {
-      if (v == null) return '';
+    const formatHex = v=>{
+
+      if(v == null) return '';
       const s = String(v).trim();
-      if (/^0x[0-9a-f]+$/i.test(s)) return '0x' + s.slice(2).toUpperCase();
-      if (/^[0-9a-fA-F]+$/.test(s) && /[a-fA-F]/.test(s)) return '0x' + s.toUpperCase();
+      if(/^0x[0-9a-f]+$/i.test(s)) return '0x' + s.slice(2).toUpperCase();
+      if(/^[0-9a-fA-F]+$/.test(s) && /[a-fA-F]/.test(s)) return '0x' + s.toUpperCase();
       return s;
     };
 
@@ -348,19 +394,24 @@ function endSession() {
     let displayYour = String(a.yourAnswer);
     // if the correct answer is hex, the user was expected to input hex
     const expectedHex = String(a.correctAnswer).toLowerCase().startsWith('0x');
-    if (expectedHex) {
+    if(expectedHex)
+    {
       // normalize user's hex input when possible
       const maybeHex = String(a.yourAnswer).trim();
-      if (/^0x[0-9a-f]+$/i.test(maybeHex) || /^[0-9a-fA-F]+$/.test(maybeHex)) {
+      if(/^0x[0-9a-f]+$/i.test(maybeHex) || /^[0-9a-fA-F]+$/.test(maybeHex))
+      {
         displayYour = formatHex(maybeHex);
         // if answer was wrong, also append calculated decimal in parentheses
-        if (!a.correct) {
+        if(!a.correct)
+        {
           const hexPart = maybeHex.replace(/^0x/i, '');
           const dec = parseInt(hexPart, 16);
-          if (!Number.isNaN(dec)) displayYour += ` (${dec})`;
+          if(!Number.isNaN(dec)) displayYour += ` (${dec})`;
         }
       }
-    } else {
+    }
+    else
+    {
       // when question was hex, normalize user's decimal input not needed
       displayYour = String(a.yourAnswer);
     }
@@ -374,14 +425,16 @@ function endSession() {
   renderHistoryList();
 }
 
-function reset() {
+function reset(){
+
   document.getElementById('results').classList.add('hidden');
   document.getElementById('setup').classList.remove('hidden');
   document.getElementById('history').classList.remove('hidden');
   drawChart();
 }
 
-function drawChart() {
+function drawChart(){
+
   const canvas = document.getElementById('chart');
   const ctx = canvas.getContext('2d');
   const cw = canvas.clientWidth || 600;
@@ -395,15 +448,23 @@ function drawChart() {
   ctx.clearRect(0, 0, cw, ch);
 
   let hist = [];
-  try { hist = JSON.parse(localStorage.getItem('hexHistory')||'[]'); } catch(e){ hist = []; }
+  try
+  {
+    hist = JSON.parse(localStorage.getItem('hexHistory')||'[]');
+  }
+  catch(e)
+  {
+    hist = [];
+  }
   if(!Array.isArray(hist) || hist.length === 0) return;
 
-  const mappedTime = hist.map(h => Number(h.avg) || 0);
+  const mappedTime = hist.map(h=>Number(h.avg) || 0);
   const maxTime = Math.max(...mappedTime);
 
   // compute correct percentage series (0-100)
-  const mappedPct = hist.map(h => {
-    if (typeof h.correctPct !== 'undefined') return Number(h.correctPct) || 0;
+  const mappedPct = hist.map(h=>{
+
+    if(typeof h.correctPct !== 'undefined') return Number(h.correctPct) || 0;
     const c = Number(h.correct) || 0; const cnt = Number(h.count) || 1; return cnt? (c/cnt*100) : 0;
   });
   const maxPct = 100;
@@ -416,7 +477,8 @@ function drawChart() {
   ctx.strokeStyle = '#a21caf';
   ctx.fillStyle = '#a21caf';
   ctx.beginPath();
-  hist.forEach((h, i) => {
+  hist.forEach((h, i)=>{
+
     const x = (i/((hist.length-1)||1))*cw;
     const pct = mappedPct[i] || 0;
     const y = ch - (pct/maxPct)*ch;
@@ -424,6 +486,7 @@ function drawChart() {
   });
   ctx.stroke();
   hist.forEach((h,i)=>{
+
     const x=(i/((hist.length-1)||1))*cw;
     const pct = mappedPct[i]||0;
     const y = ch - (pct/maxPct)*ch;
@@ -431,12 +494,13 @@ function drawChart() {
   });
 
   // time polyline (secondary, lighter)
-  if (isFinite(maxTime) && maxTime > 0) {
+  if(isFinite(maxTime) && maxTime > 0)
+  {
     ctx.strokeStyle = 'rgba(156,39,176,0.9)';
     ctx.fillStyle = 'rgba(156,39,176,0.9)';
     ctx.lineWidth = 1.2;
     ctx.beginPath();
-    hist.forEach((h, i) => {
+    hist.forEach((h, i)=>{
       const x = (i/((hist.length-1)||1))*cw;
       const avgVal = Number(h.avg) || 0;
       const y = ch - (avgVal/maxTime)*(ch*0.6); // compress time series to lower portion
@@ -467,16 +531,29 @@ drawChart();
 renderHistoryList();
 
 function renderHistoryList(){
+
   const container = document.getElementById('historyList');
   container.innerHTML = '';
   let hist = [];
-  try { hist = JSON.parse(localStorage.getItem('hexHistory')||'[]'); } catch(e){ hist = []; }
-  if(!Array.isArray(hist) || hist.length===0){ container.innerHTML = '<p>No history yet.</p>'; return; }
+  try
+  {
+    hist = JSON.parse(localStorage.getItem('hexHistory')||'[]');
+  }
+  catch(e)
+  {
+    hist = [];
+  }
+  if(!Array.isArray(hist) || hist.length===0)
+  {
+    container.innerHTML = '<p>No history yet.</p>';
+    return;
+  }
 
   const table = document.createElement('table');
   table.innerHTML = '<thead><tr><th>Date</th><th>Mode</th><th>Bits</th><th>Count</th><th>Correct</th><th>%</th><th>Total (s)</th><th>Avg (s)</th></tr></thead>';
   const tbody = document.createElement('tbody');
-  hist.slice().reverse().forEach(h => {
+  hist.slice().reverse().forEach(h=>{
+
     const tr = document.createElement('tr');
     const date = new Date(h.date || 0).toLocaleString();
     const pct = (typeof h.correctPct !== 'undefined') ? (Number(h.correctPct)||0) : ((Number(h.correct)||0)/(Number(h.count)||1)*100);
@@ -488,8 +565,16 @@ function renderHistoryList(){
 }
 
 function clearHistory(){
+
   if(!confirm('Clear all history?')) return;
-  try{ localStorage.removeItem('hexHistory'); } catch(e){ console.error('Failed to clear history', e); }
+  try
+  {
+    localStorage.removeItem('hexHistory');
+  }
+  catch(e)
+  {
+    console.error('Failed to clear history', e);
+  }
   drawChart(); renderHistoryList();
 }
 </script>
